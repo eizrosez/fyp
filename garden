@@ -1,0 +1,662 @@
+// garden.dart
+// ignore_for_file: deprecated_member_use, library_private_types_in_public_api
+
+import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
+
+class GardenPage extends StatefulWidget {
+  const GardenPage({super.key});
+
+  @override
+  _GardenPageState createState() => _GardenPageState();
+}
+
+class _GardenPageState extends State<GardenPage> {
+  // Plant emojis and their meanings
+  final Map<String, String> plantMeanings = {
+    '🌱': 'Starting point - neutral mood',
+    '🌿': 'Growth - slightly positive mood',
+    '🌷': 'Blooming - good mood',
+    '🌻': 'Radiant - great mood',
+    '🌼': 'Flourishing - excellent mood',
+  };
+
+  // Map to store mood plants
+  Map<String, String> moodPlants = {};
+  DateTime _selectedMonth = DateTime(2025, 3);
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadMoodData();
+  }
+
+  // Load mood data from SharedPreferences
+  Future<void> _loadMoodData() async {
+    setState(() {
+      _isLoading = true;
+    });
+    
+    final prefs = await SharedPreferences.getInstance();
+    final String? moodData = prefs.getString('mood_plants');
+    
+    if (moodData != null) {
+      final Map<String, dynamic> decodedData = json.decode(moodData);
+      
+      // Convert string keys back to DateTime
+      setState(() {
+        moodPlants = decodedData.map((key, value) => 
+          MapEntry(key, value as String)
+        );
+      });
+    } else {
+      // Add sample data for first time users
+      _initializeSampleData();
+    }
+    
+    setState(() {
+      _isLoading = false;
+    });
+  }
+
+  // Save mood data to SharedPreferences
+  Future<void> _saveMoodData() async {
+    final prefs = await SharedPreferences.getInstance();
+    final String encodedData = json.encode(moodPlants);
+    await prefs.setString('mood_plants', encodedData);
+  }
+
+  // Add or update a mood entry
+  Future<void> _updateMood(DateTime date, String plant) async {
+    final dateKey = _dateToKey(date);
+    
+    setState(() {
+      moodPlants[dateKey] = plant;
+    });
+    
+    await _saveMoodData();
+  }
+
+  // Convert DateTime to string key
+  String _dateToKey(DateTime date) {
+    return "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
+  }
+
+  // Convert string key to DateTime
+  DateTime _keyToDate(String key) {
+    final parts = key.split('-');
+    return DateTime(
+      int.parse(parts[0]), 
+      int.parse(parts[1]), 
+      int.parse(parts[2])
+    );
+  }
+
+  // Initialize with sample data for first-time users
+  void _initializeSampleData() {
+    final sampleData = {
+      _dateToKey(DateTime(2025, 3, 1)): '🌱',
+      _dateToKey(DateTime(2025, 3, 2)): '🌿',
+      _dateToKey(DateTime(2025, 3, 3)): '🌷',
+      _dateToKey(DateTime(2025, 3, 4)): '🌻',
+      _dateToKey(DateTime(2025, 3, 5)): '🌼',
+      _dateToKey(DateTime(2025, 3, 6)): '🌿',
+      _dateToKey(DateTime(2025, 3, 7)): '🌷',
+      _dateToKey(DateTime(2025, 3, 8)): '🌱',
+      _dateToKey(DateTime(2025, 3, 9)): '🌻',
+      _dateToKey(DateTime(2025, 3, 10)): '🌼',
+      _dateToKey(DateTime(2025, 3, 11)): '🌷',
+    };
+    
+    setState(() {
+      moodPlants = sampleData;
+    });
+    
+    _saveMoodData();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      extendBodyBehindAppBar: true,
+      appBar: AppBar(
+        title: const Text(
+          'Your Mood Garden',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () => Navigator.pop(context),
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.info_outline, color: Colors.white),
+            onPressed: () => _showGardenInfo(context),
+          ),
+        ],
+      ),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Color(0xFF003973), Color(0xFF0099F7)],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          ),
+        ),
+        child: _isLoading 
+          ? const Center(child: CircularProgressIndicator(color: Colors.white))
+          : SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildMonthSelector(),
+                    const SizedBox(height: 20),
+                    _buildLegend(),
+                    const SizedBox(height: 20),
+                    Expanded(
+                      child: _buildGardenGrid(),
+                    ),
+                    const SizedBox(height: 20),
+                    _buildMoodSummary(),
+                  ],
+                ),
+              ),
+            ),
+      ),
+    );
+  }
+
+  Widget _buildMonthSelector() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        IconButton(
+          icon: const Icon(Icons.chevron_left, color: Colors.white),
+          onPressed: () {
+            setState(() {
+              _selectedMonth = DateTime(
+                _selectedMonth.year,
+                _selectedMonth.month - 1,
+              );
+            });
+          },
+        ),
+        Text(
+          '${_getMonthName(_selectedMonth.month)} ${_selectedMonth.year}',
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        IconButton(
+          icon: const Icon(Icons.chevron_right, color: Colors.white),
+          onPressed: () {
+            setState(() {
+              _selectedMonth = DateTime(
+                _selectedMonth.year,
+                _selectedMonth.month + 1,
+              );
+            });
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLegend() {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.2),
+        borderRadius: BorderRadius.circular(15),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: plantMeanings.entries.map((entry) {
+          return Row(
+            children: [
+              Text(
+                entry.key,
+                style: const TextStyle(fontSize: 20),
+              ),
+              const SizedBox(width: 4),
+              Text(
+                entry.key,
+                style: const TextStyle(color: Colors.white, fontSize: 14),
+              ),
+            ],
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _buildGardenGrid() {
+    final daysInMonth = _getDaysInMonth(_selectedMonth.year, _selectedMonth.month);
+    final firstDayOfMonth = DateTime(_selectedMonth.year, _selectedMonth.month, 1);
+    final firstWeekdayOfMonth = firstDayOfMonth.weekday;
+    
+    // Adjust for Calendar display (where we want Sunday as 0)
+    final startingPos = (firstWeekdayOfMonth == 7) ? 0 : firstWeekdayOfMonth;
+    
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.2),
+        borderRadius: BorderRadius.circular(15),
+      ),
+      child: Column(
+        children: [
+          _buildWeekdayHeaders(),
+          Expanded(
+            child: GridView.builder(
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 7,
+                childAspectRatio: 1,
+              ),
+              itemCount: 42, // 6 rows x 7 days
+              itemBuilder: (context, index) {
+                if (index < startingPos || index >= startingPos + daysInMonth) {
+                  // Empty cell
+                  return Container();
+                } else {
+                  final day = index - startingPos + 1;
+                  final date = DateTime(_selectedMonth.year, _selectedMonth.month, day);
+                  return _buildDayCell(date, day);
+                }
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWeekdayHeaders() {
+    final weekdays = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceAround,
+      children: weekdays.map((day) {
+        return Text(
+          day,
+          style: TextStyle(
+            color: Colors.white.withOpacity(0.8),
+            fontWeight: FontWeight.bold,
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildDayCell(DateTime date, int day) {
+    final isToday = _isToday(date);
+    final dateKey = _dateToKey(date);
+    final hasPlant = moodPlants.containsKey(dateKey);
+    
+    return GestureDetector(
+      onTap: () => _showDayDetails(date),
+      child: Container(
+        margin: const EdgeInsets.all(2),
+        decoration: BoxDecoration(
+          color: isToday 
+              ? Colors.white.withOpacity(0.3) 
+              : hasPlant 
+                  ? Colors.white.withOpacity(0.1) 
+                  : Colors.transparent,
+          borderRadius: BorderRadius.circular(10),
+          border: isToday 
+              ? Border.all(color: Colors.white, width: 2) 
+              : null,
+        ),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            // Day number
+            Positioned(
+              top: 2,
+              right: 5,
+              child: Text(
+                day.toString(),
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.7),
+                  fontSize: 12,
+                ),
+              ),
+            ),
+            // Plant emoji if exists
+            hasPlant
+                ? Text(
+                    moodPlants[dateKey]!,
+                    style: const TextStyle(fontSize: 24),
+                  )
+                : Text(
+                    '🌫️',
+                    style: TextStyle(
+                      fontSize: 24,
+                      color: Colors.white.withOpacity(0.3),
+                    ),
+                  ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMoodSummary() {
+    // Count plants for the selected month
+    final monthPlants = moodPlants.entries.where((entry) {
+      final date = _keyToDate(entry.key);
+      return date.year == _selectedMonth.year && date.month == _selectedMonth.month;
+    }).toList();
+    
+    final countMap = <String, int>{};
+    for (final plant in plantMeanings.keys) {
+      countMap[plant] = 0;
+    }
+    
+    for (final entry in monthPlants) {
+      countMap[entry.value] = (countMap[entry.value] ?? 0) + 1;
+    }
+    
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.2),
+        borderRadius: BorderRadius.circular(15),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Monthly Summary',
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 18,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: countMap.entries.map((entry) {
+              return Column(
+                children: [
+                  Text(
+                    entry.key,
+                    style: const TextStyle(fontSize: 24),
+                  ),
+                  Text(
+                    'x${entry.value}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'You logged your mood on ${monthPlants.length} days this month',
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.7),
+              fontSize: 14,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showDayDetails(DateTime date) {
+    final dateKey = _dateToKey(date);
+    final hasPlant = moodPlants.containsKey(dateKey);
+    final plant = hasPlant ? moodPlants[dateKey]! : '🌫️';
+    final meaning = hasPlant ? plantMeanings[plant] : 'No mood logged';
+    
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFF003973),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.3),
+              blurRadius: 10,
+              spreadRadius: 5,
+            ),
+          ],
+        ),
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              '${date.day} ${_getMonthName(date.month)} ${date.year}',
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 20,
+              ),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              plant,
+              style: const TextStyle(fontSize: 50),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              meaning!,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+              ),
+            ),
+            const SizedBox(height: 20),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                if (hasPlant)
+                  ElevatedButton(
+                    onPressed: () {
+                      // Delete this mood entry
+                      _showMoodSelector(context, date, true);
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.redAccent,
+                      foregroundColor: Colors.white,
+                    ),
+                    child: const Text('Delete'),
+                  ),
+                ElevatedButton(
+                  onPressed: () {
+                    // Add or edit mood for this day
+                    _showMoodSelector(context, date, false);
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: hasPlant ? Colors.white : Colors.blueAccent,
+                    foregroundColor: hasPlant ? Colors.blueAccent : Colors.white,
+                  ),
+                  child: Text(hasPlant ? 'Edit Mood' : 'Log Mood'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showMoodSelector(BuildContext context, DateTime date, bool isDelete) {
+    if (isDelete) {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Delete Mood Entry'),
+          content: const Text('Are you sure you want to delete this mood entry?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
+                final dateKey = _dateToKey(date);
+                setState(() {
+                  moodPlants.remove(dateKey);
+                });
+                _saveMoodData();
+                Navigator.pop(context); // Close dialog
+                Navigator.pop(context); // Close bottom sheet
+              },
+              child: const Text('Delete', style: TextStyle(color: Colors.red)),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFF003973),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.3),
+              blurRadius: 10,
+              spreadRadius: 5,
+            ),
+          ],
+        ),
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Select Your Mood for ${date.day} ${_getMonthName(date.month)}',
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 20,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 20),
+            Wrap(
+              spacing: 20,
+              runSpacing: 20,
+              alignment: WrapAlignment.center,
+              children: plantMeanings.entries.map((entry) {
+                return GestureDetector(
+                  onTap: () {
+                    _updateMood(date, entry.key);
+                    Navigator.pop(context); // Close mood selector
+                    Navigator.pop(context); // Close day details
+                  },
+                  child: Column(
+                    children: [
+                      Text(
+                        entry.key,
+                        style: const TextStyle(fontSize: 40),
+                      ),
+                      const SizedBox(height: 5),
+                      Text(
+                        entry.value.split(' - ')[1],
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 20),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text(
+                'Cancel',
+                style: TextStyle(color: Colors.white70),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showGardenInfo(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('About Your Mood Garden'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Your Mood Garden visualizes your emotional journey through plant growth:',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 10),
+            ...plantMeanings.entries.map((entry) => Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(
+                children: [
+                  Text(entry.key, style: const TextStyle(fontSize: 20)),
+                  const SizedBox(width: 10),
+                  Expanded(child: Text(entry.value)),
+                ],
+              ),
+            )).toList(),
+            const SizedBox(height: 10),
+            const Text(
+              'Each plant represents how you felt on a particular day. Watch your garden grow as you continue your emotional wellness journey!',
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Helper methods
+  String _getMonthName(int month) {
+    const months = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    return months[month - 1];
+  }
+
+  int _getDaysInMonth(int year, int month) {
+    return DateTime(year, month + 1, 0).day;
+  }
+
+  bool _isToday(DateTime date) {
+    final now = DateTime.now();
+    return date.year == now.year && date.month == now.month && date.day == now.day;
+  }
+}
